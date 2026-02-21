@@ -120,12 +120,23 @@ export function authRoutes(app: Fastify) {
         }
 
         const publicKeyHex = privacyKit.encodeHex(publicKey);
+
+        // Check both terminal and account auth request tables
         const authRequest = await db.terminalAuthRequest.findUnique({
             where: { publicKey: publicKeyHex }
         });
-
         if (!authRequest) {
-            return reply.send({ status: 'not_found', supportsV2: false });
+            // Fall back to account auth request table
+            const accountRequest = await db.accountAuthRequest.findUnique({
+                where: { publicKey: publicKeyHex }
+            });
+            if (!accountRequest) {
+                return reply.send({ status: 'not_found', supportsV2: false });
+            }
+            if (accountRequest.response && accountRequest.responseAccountId) {
+                return reply.send({ status: 'authorized', supportsV2: false });
+            }
+            return reply.send({ status: 'pending', supportsV2: false });
         }
 
         if (authRequest.response && authRequest.responseAccountId) {
@@ -159,14 +170,21 @@ export function authRoutes(app: Fastify) {
             where: { publicKey: publicKeyHex }
         });
         if (!authRequest) {
-            log({ module: 'auth-response' }, `Auth request not found for publicKey: ${publicKeyHex}`);
-            // Let's also check what auth requests exist
-            const allRequests = await db.terminalAuthRequest.findMany({
-                take: 5,
-                orderBy: { createdAt: 'desc' }
+            // Fall back to account auth request table
+            const accountRequest = await db.accountAuthRequest.findUnique({
+                where: { publicKey: publicKeyHex }
             });
-            log({ module: 'auth-response' }, `Recent auth requests in DB: ${JSON.stringify(allRequests.map(r => ({ id: r.id, publicKey: r.publicKey.substring(0, 20) + '...', hasResponse: !!r.response })))}`);
-            return reply.code(404).send({ error: 'Request not found' });
+            if (!accountRequest) {
+                log({ module: 'auth-response' }, `Auth request not found in either table for publicKey: ${publicKeyHex}`);
+                return reply.code(404).send({ error: 'Request not found' });
+            }
+            if (!accountRequest.response) {
+                await db.accountAuthRequest.update({
+                    where: { id: accountRequest.id },
+                    data: { response: request.body.response, responseAccountId: request.userId }
+                });
+            }
+            return reply.send({ success: true });
         }
         if (!authRequest.response) {
             await db.terminalAuthRequest.update({
