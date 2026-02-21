@@ -49,8 +49,13 @@ COPY --from=builder /repo/node_modules /repo/node_modules
 COPY --from=builder /repo/packages/happy-wire /repo/packages/happy-wire
 COPY --from=builder /repo/packages/happy-server /repo/packages/happy-server
 
+RUN groupadd -r happyuser && useradd -r -g happyuser -d /repo happyuser \
+    && chown -R happyuser:happyuser /repo
+
 # Expose the port the app will run on
 EXPOSE 3000
+
+USER happyuser
 
 # Command to run the application
 CMD ["yarn", "--cwd", "packages/happy-server", "start"]

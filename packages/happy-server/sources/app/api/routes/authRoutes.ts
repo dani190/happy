@@ -7,6 +7,12 @@ import { log } from "@/utils/log";
 
 export function authRoutes(app: Fastify) {
     app.post('/v1/auth', {
+        config: {
+            rateLimit: {
+                max: 10,
+                timeWindow: '1 minute'
+            }
+        },
         schema: {
             body: z.object({
                 publicKey: z.string(),
@@ -39,6 +45,12 @@ export function authRoutes(app: Fastify) {
     });
 
     app.post('/v1/auth/request', {
+        config: {
+            rateLimit: {
+                max: 10,
+                timeWindow: '1 minute'
+            }
+        },
         schema: {
             body: z.object({
                 publicKey: z.string(),
@@ -66,7 +78,7 @@ export function authRoutes(app: Fastify) {
         }
 
         const publicKeyHex = privacyKit.encodeHex(publicKey);
-        log({ module: 'auth-request' }, `Terminal auth request - publicKey hex: ${publicKeyHex}`);
+        log({ module: 'auth-request' }, `Terminal auth request`);
 
         const answer = await db.terminalAuthRequest.upsert({
             where: { publicKey: publicKeyHex },
@@ -167,6 +179,12 @@ export function authRoutes(app: Fastify) {
 
     // Account auth request
     app.post('/v1/auth/account/request', {
+        config: {
+            rateLimit: {
+                max: 10,
+                timeWindow: '1 minute'
+            }
+        },
         schema: {
             body: z.object({
                 publicKey: z.string(),

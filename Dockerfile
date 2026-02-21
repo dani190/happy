@@ -51,7 +51,12 @@ COPY --from=builder /repo/node_modules /repo/node_modules
 COPY --from=builder /repo/packages/happy-wire /repo/packages/happy-wire
 COPY --from=builder /repo/packages/happy-server /repo/packages/happy-server
 
+RUN groupadd -r happyuser && useradd -r -g happyuser -d /repo happyuser \
+    && chown -R happyuser:happyuser /repo
+
 VOLUME /data
 EXPOSE 3005
+
+USER happyuser
 
 CMD ["sh", "-c", "node_modules/.bin/tsx packages/happy-server/sources/standalone.ts migrate && exec node_modules/.bin/tsx packages/happy-server/sources/standalone.ts serve"]

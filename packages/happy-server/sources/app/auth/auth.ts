@@ -5,7 +5,12 @@ interface TokenCacheEntry {
     userId: string;
     extras?: any;
     cachedAt: number;
+    expiresAt: number;
 }
+
+const MAX_CACHE_SIZE = 10000;
+const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 interface AuthTokens {
     generator: Awaited<ReturnType<typeof privacyKit.createPersistentTokenGenerator>>;
@@ -17,14 +22,26 @@ interface AuthTokens {
 class AuthModule {
     private tokenCache = new Map<string, TokenCacheEntry>();
     private tokens: AuthTokens | null = null;
-    
+    private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
     async init(): Promise<void> {
         if (this.tokens) {
             return; // Already initialized
         }
-        
+
+        // Validate master secret
+        if (!process.env.HANDY_MASTER_SECRET) {
+            throw new Error('HANDY_MASTER_SECRET environment variable is required');
+        }
+        if (process.env.HANDY_MASTER_SECRET.length < 32) {
+            throw new Error('HANDY_MASTER_SECRET must be at least 32 characters');
+        }
+
         log({ module: 'auth' }, 'Initializing auth module...');
-        
+
+        // Start periodic cache cleanup
+        this.cleanupTimer = setInterval(() => this.cleanup(), CLEANUP_INTERVAL_MS);
+
         const generator = await privacyKit.createPersistentTokenGenerator({
             service: 'handy',
             seed: process.env.HANDY_MASTER_SECRET!
@@ -65,13 +82,9 @@ class AuthModule {
         
         const token = await this.tokens.generator.new(payload);
         
-        // Cache the token immediately
-        this.tokenCache.set(token, {
-            userId,
-            extras,
-            cachedAt: Date.now()
-        });
-        
+        // Cache the token with TTL
+        this.cacheToken(token, userId, extras);
+
         return token;
     }
     
@@ -99,12 +112,8 @@ class AuthModule {
             const userId = verified.user as string;
             const extras = verified.extras;
             
-            // Cache the result permanently
-            this.tokenCache.set(token, {
-                userId,
-                extras,
-                cachedAt: Date.now()
-            });
+            // Cache the result with TTL
+            this.cacheToken(token, userId, extras);
             
             return { userId, extras };
             
@@ -177,12 +186,43 @@ class AuthModule {
         }
     }
 
-    // Cleanup old entries (optional - can be called periodically)
+    private cacheToken(token: string, userId: string, extras?: any): void {
+        // Evict expired entries if cache is full
+        if (this.tokenCache.size >= MAX_CACHE_SIZE) {
+            this.cleanup();
+        }
+        // If still full after cleanup, evict oldest entry
+        if (this.tokenCache.size >= MAX_CACHE_SIZE) {
+            let oldestKey: string | null = null;
+            let oldestTime = Infinity;
+            for (const [key, entry] of this.tokenCache.entries()) {
+                if (entry.cachedAt < oldestTime) {
+                    oldestTime = entry.cachedAt;
+                    oldestKey = key;
+                }
+            }
+            if (oldestKey) {
+                this.tokenCache.delete(oldestKey);
+            }
+        }
+        this.tokenCache.set(token, {
+            userId,
+            extras,
+            cachedAt: Date.now(),
+            expiresAt: Date.now() + TOKEN_TTL_MS,
+        });
+    }
+
     cleanup(): void {
-        // Note: Since tokens are cached "forever" as requested,
-        // we don't do automatic cleanup. This method exists if needed later.
-        const stats = this.getCacheStats();
-        log({ module: 'auth' }, `Token cache size: ${stats.size} entries`);
+        const now = Date.now();
+        let evicted = 0;
+        for (const [token, entry] of this.tokenCache.entries()) {
+            if (entry.expiresAt < now) {
+                this.tokenCache.delete(token);
+                evicted++;
+            }
+        }
+        log({ module: 'auth' }, `Token cache cleanup: evicted ${evicted}, remaining ${this.tokenCache.size}`);
     }
 }
 

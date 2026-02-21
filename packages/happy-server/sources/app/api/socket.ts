@@ -13,14 +13,23 @@ import { machineUpdateHandler } from "./socket/machineUpdateHandler";
 import { artifactUpdateHandler } from "./socket/artifactUpdateHandler";
 import { accessKeyHandler } from "./socket/accessKeyHandler";
 
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
+    : [
+        'https://app.happy.engineering',
+        'https://happy.engineering',
+    ];
+
 export function startSocket(app: Fastify) {
+    const isDev = process.env.NODE_ENV === 'development';
     const io = new Server(app.server, {
         cors: {
-            origin: "*",
+            origin: isDev ? true : ALLOWED_ORIGINS,
             methods: ["GET", "POST", "OPTIONS"],
             credentials: true,
-            allowedHeaders: ["*"]
+            allowedHeaders: ["Content-Type", "Authorization"],
         },
+        maxHttpBufferSize: 10 * 1024 * 1024, // 10MB max message size
         transports: ['websocket', 'polling'],
         pingTimeout: 45000,
         pingInterval: 15000,

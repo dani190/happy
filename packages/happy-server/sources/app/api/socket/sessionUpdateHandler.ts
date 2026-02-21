@@ -182,12 +182,24 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
         }
     });
 
+    const MAX_MESSAGE_SIZE = 10 * 1024 * 1024; // 10MB
     const receiveMessageLock = new AsyncLock();
     socket.on('message', async (data: any) => {
         await receiveMessageLock.inLock(async () => {
             try {
                 websocketEventsCounter.inc({ event_type: 'message' });
                 const { sid, message, localId } = data;
+
+                // Validate message size
+                if (!message || typeof message !== 'string' || message.length > MAX_MESSAGE_SIZE) {
+                    log({ module: 'websocket', level: 'warn' }, `Rejected oversized or invalid message from socket ${socket.id}`);
+                    return;
+                }
+
+                // Validate session ID format
+                if (!sid || typeof sid !== 'string' || sid.length > 100) {
+                    return;
+                }
 
                 log({ module: 'websocket' }, `Received message from socket ${socket.id}: sessionId=${sid}, messageLength=${message.length} bytes, connectionType=${connection.connectionType}, connectionSessionId=${connection.connectionType === 'session-scoped' ? connection.sessionId : 'N/A'}`);
 
