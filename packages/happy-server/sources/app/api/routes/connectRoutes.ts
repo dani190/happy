@@ -260,10 +260,11 @@ export function connectRoutes(app: Fastify) {
         const userId = request.userId;
         // Token arrives E2E encrypted by the client — store as opaque blob.
         // The server cannot and should not decrypt vendor tokens.
+        const tokenBytes = Buffer.from(request.body.token, 'utf-8');
         await db.serviceAccountToken.upsert({
             where: { accountId_vendor: { accountId: userId, vendor: request.params.vendor } },
-            update: { updatedAt: new Date(), token: request.body.token },
-            create: { accountId: userId, vendor: request.params.vendor, token: request.body.token }
+            update: { updatedAt: new Date(), token: tokenBytes },
+            create: { accountId: userId, vendor: request.params.vendor, token: tokenBytes }
         });
         reply.send({ success: true });
     });
@@ -290,7 +291,7 @@ export function connectRoutes(app: Fastify) {
             return reply.send({ token: null });
         } else {
             // Return E2E encrypted blob as-is — only the client can decrypt
-            return reply.send({ token: token.token });
+            return reply.send({ token: Buffer.from(token.token).toString('utf-8') });
         }
     });
 
@@ -328,7 +329,7 @@ export function connectRoutes(app: Fastify) {
         const userId = request.userId;
         const tokens = await db.serviceAccountToken.findMany({ where: { accountId: userId } });
         // Return E2E encrypted blobs as-is — only the client can decrypt
-        const result = tokens.map(token => ({ vendor: token.vendor, token: token.token }));
+        const result = tokens.map(token => ({ vendor: token.vendor, token: Buffer.from(token.token).toString('utf-8') }));
         return reply.send({ tokens: result });
     });
 
