@@ -60,4 +60,6 @@ EXPOSE 3005
 
 USER happyuser
 
-CMD ["sh", "-c", "node_modules/.bin/tsx packages/happy-server/sources/standalone.ts migrate && exec node_modules/.bin/tsx packages/happy-server/sources/standalone.ts serve"]
+WORKDIR /repo/packages/happy-server
+
+CMD ["sh", "-c", "../../node_modules/.bin/tsx sources/standalone.ts migrate && exec ../../node_modules/.bin/tsx sources/standalone.ts serve"]
