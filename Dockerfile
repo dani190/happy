@@ -52,7 +52,8 @@ COPY --from=builder /repo/packages/happy-wire /repo/packages/happy-wire
 COPY --from=builder /repo/packages/happy-server /repo/packages/happy-server
 
 RUN groupadd -r happyuser && useradd -r -g happyuser -d /repo happyuser \
-    && chown -R happyuser:happyuser /repo
+    && chown -R happyuser:happyuser /repo \
+    && mkdir -p /data && chown -R happyuser:happyuser /data
 
 VOLUME /data
 EXPOSE 3005
